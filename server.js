@@ -19,8 +19,24 @@ app.get("/api/movies", async (req, res) => {
     console.log(data);
     res.json(data);
   } catch (error) {
-    
     res.status(500).json({ error: "Failed to fetch movies" });
+  }
+});
+
+app.get("/api/movie", async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) {
+      return res.status(400).json({ error: "Query parameter is required" });
+    }
+    console.log("Searching for:", query);
+    const response = await axios.get(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`);
+    const data = response.data;
+    console.log("Found movies:", data.results.length);
+    res.json(data);
+  } catch (error) {
+    console.error("Search error:", error.message);
+    res.status(500).json({ error: "Failed to search movies" });
   }
 });
 
