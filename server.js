@@ -14,7 +14,17 @@ const PORT = process.env.PORT || 5000;
 
 app.get("/api/movies", async (req, res) => {
   try {
-    // const response = await axios.get(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}`);
+    const response = await axios.get(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}`); 
+    const data = response.data;
+    console.log(data);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch movies" });
+  }
+});
+app.get("/api/movies/tamil", async (req, res) => {
+  try {
+  
     const response = await axios.get(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&sort_by=popularity.desc&vote_count.gte=10`); 
     const data = response.data;
     console.log(data);
