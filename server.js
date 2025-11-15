@@ -11,23 +11,6 @@ app.use(loginRouter);
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const PORT = process.env.PORT || 5000;
-const BASE_URL = "https://api.themoviedb.org/3/discover/movie";
-
-const GENRES = {
-  comedy: 35,
-  romance: 10749,
-  crime: 80,
-  thriller: 53,
-};
-
-async function fetchTamilMoviesByGenre(genreId) {
-  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-
-  const url = `${BASE_URL}?api_key=${TMDB_API_KEY}&with_original_language=ta&with_genres=${genreId}&with_release_type=4&primary_release_date.lte=${today}&sort_by=primary_release_date.desc&include_adult=false&region=IN`;
-
-  const res = await axios.get(url);
-  return res.data.results;
-}
 
 app.get("/api/movies", async (req, res) => {
   try {
@@ -41,22 +24,17 @@ app.get("/api/movies", async (req, res) => {
 });
 app.get("/api/movies/tamil", async (req, res) => {
   try {
-    const [comedy, romance, crime, thriller] = await Promise.all([
-      fetchTamilMoviesByGenre(GENRES.comedy),
-      fetchTamilMoviesByGenre(GENRES.romance),
-      fetchTamilMoviesByGenre(GENRES.crime),
-      fetchTamilMoviesByGenre(GENRES.thriller),
-    ]);
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
-    res.json({
-      comedy,
-      romance,
-      crime,
-      thriller,
-    });
+    const url = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&with_release_type=4&primary_release_date.lte=${today}&sort_by=primary_release_date.desc&include_adult=false&region=IN`;
+
+    const response = await axios.get(url);
+    const data = response.data;
+    console.log("Tamil OTT movies:", data.results.length);
+    res.json(data);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error fetching Tamil OTT movies" });
+    console.error("Tamil OTT error:", error.message);
+    res.status(500).json({ error: "Failed to fetch Tamil OTT movies" });
   }
 });
 
