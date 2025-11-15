@@ -25,13 +25,23 @@ app.get("/api/movies", async (req, res) => {
 app.get("/api/movies/tamil", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const baseUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&with_release_type=4&primary_release_date.lte=${today}&sort_by=primary_release_date.desc&include_adult=false&region=IN`;
 
-    const url = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&with_release_type=4&primary_release_date.lte=${today}&sort_by=primary_release_date.desc&include_adult=false&region=IN`;
+    // Fetch 10 pages in parallel
+    const pagePromises = [];
+    for (let page = 1; page <= 10; page++) {
+      pagePromises.push(axios.get(`${baseUrl}&page=${page}`));
+    }
 
-    const response = await axios.get(url);
-    const data = response.data;
-    console.log("Tamil OTT movies:", data.results.length);
-    res.json(data);
+    const responses = await Promise.all(pagePromises);
+    
+    // Combine all results from all pages
+    const allResults = responses.reduce((acc, response) => {
+      return acc.concat(response.data.results || []);
+    }, []);
+
+    console.log("Tamil OTT movies:", allResults.length);
+    res.json({ results: allResults, total_results: allResults.length });
   } catch (error) {
     console.error("Tamil OTT error:", error.message);
     res.status(500).json({ error: "Failed to fetch Tamil OTT movies" });
