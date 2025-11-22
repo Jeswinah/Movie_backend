@@ -65,6 +65,17 @@ app.get("/api/movie", async (req, res) => {
   }
 });
 
+app.get("/api/stream/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const streamUrl = `https://player.videasy.net/movie/${id}?autoplay=1`;
+    res.json({ streamUrl });
+  } catch (error) {
+    console.error("Stream error:", error.message);
+    res.status(500).json({ error: "Failed to get stream URL" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
 });
