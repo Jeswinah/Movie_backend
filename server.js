@@ -76,6 +76,18 @@ app.get("/api/stream/:id", async (req, res) => {
   }
 });
 
+app.get("/api/movie/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("Fetching movie details for ID:", id);
+    const response = await axios.get(`https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}`);
+    res.json(response.data);
+  } catch (error) {
+    console.error("Movie details error:", error.message);
+    res.status(500).json({ error: "Failed to fetch movie details" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
 });
