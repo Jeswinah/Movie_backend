@@ -68,12 +68,8 @@ app.get("/api/movie", async (req, res) => {
 app.get("/api/stream/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const servers = {
-      vidsrc: `https://vidsrc.pro/embed/movie/${id}`,
-      videasy: `https://player.videasy.net/movie/${id}`,
-      vidsrcto: `https://vidsrc.to/embed/movie/${id}`
-    };
-    res.json({ servers, streamUrl: servers.vidsrc });
+    const streamUrl = `https://player.videasy.net/movie/${id}?autoplay=1`;
+    res.json({ streamUrl });
   } catch (error) {
     console.error("Stream error:", error.message);
     res.status(500).json({ error: "Failed to get stream URL" });
