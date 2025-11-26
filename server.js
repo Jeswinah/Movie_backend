@@ -22,7 +22,7 @@ app.get("/api/movies", async (req, res) => {
     const allResults = responses.reduce((acc, response) => {
       return acc.concat(response.data.results || []);
     }, []);
-    console.log(allResults);
+    // console.log(allResults);
     res.json({ results: allResults, total_results: allResults.length });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch movies" });
@@ -46,7 +46,7 @@ app.get("/api/movies/tamil", async (req, res) => {
       return acc.concat(response.data.results || []);
     }, []);
 
-    console.log("Tamil OTT movies:", allResults.length);
+    // console.log("Tamil OTT movies:", allResults.length);
     res.json({ results: allResults, total_results: allResults.length });
   } catch (error) {
     console.error("Tamil OTT error:", error.message);
@@ -60,10 +60,10 @@ app.get("/api/movie", async (req, res) => {
     if (!query) {
       return res.status(400).json({ error: "Query parameter is required" });
     }
-    console.log("Searching for:", query);
+    // console.log("Searching for:", query);
     const response = await axios.get(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`);
     const data = response.data;
-    console.log("Found movies:", data.results.length);
+    // console.log("Found movies:", data.results.length);
     res.json(data);
   } catch (error) {
     console.error("Search error:", error.message);
@@ -85,7 +85,7 @@ app.get("/api/stream/:id", async (req, res) => {
 app.get("/api/movie/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("Fetching movie details for ID:", id);
+    // console.log("Fetching movie details for ID:", id);
     const response = await axios.get(`https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}`);
     res.json(response.data);
   } catch (error) {
