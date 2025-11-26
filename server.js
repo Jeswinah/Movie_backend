@@ -14,10 +14,16 @@ const PORT = process.env.PORT || 5000;
 
 app.get("/api/movies", async (req, res) => {
   try {
-    const response = await axios.get(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}`); 
-    const data = response.data;
-    console.log(data);
-    res.json(data);
+    const page=[];
+    for(let i=1;i<=5;i++){
+      page.push(axios.get(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&page=${i}`));
+    }
+    const responses = await Promise.all(page);
+    const allResults = responses.reduce((acc, response) => {
+      return acc.concat(response.data.results || []);
+    }, []);
+    console.log(allResults);
+    res.json({ results: allResults, total_results: allResults.length });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch movies" });
   }
@@ -27,7 +33,7 @@ app.get("/api/movies/tamil", async (req, res) => {
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
     const baseUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&with_release_type=4&primary_release_date.lte=${today}&sort_by=primary_release_date.desc&include_adult=false&region=IN`;
 
-    // Fetch 10 pages in parallel
+    
     const pagePromises = [];
     for (let page = 1; page <= 10; page++) {
       pagePromises.push(axios.get(`${baseUrl}&page=${page}`));
