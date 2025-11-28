@@ -75,59 +75,10 @@ app.get("/api/stream/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const streamUrl = `https://player.videasy.net/movie/${id}?autoplay=1`;
-    res.json({ streamUrl, available: true });
+    res.json({ streamUrl });
   } catch (error) {
     console.error("Stream error:", error.message);
     res.status(500).json({ error: "Failed to get stream URL" });
-  }
-});
-
-app.get("/api/check-stream/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const streamUrl = `https://player.videasy.net/movie/${id}`;
-    
-    // Fetch the actual HTML page to check if servers are available
-    const response = await axios.get(streamUrl, { 
-      timeout: 8000,
-      validateStatus: (status) => status < 500 
-    });
-    
-    if (response.status !== 200) {
-      return res.json({ 
-        available: false,
-        streamUrl: null
-      });
-    }
-
-    const htmlContent = response.data;
-    
-    // Check if the page contains actual server/player content
-    // Look for common indicators that the movie is available
-    const hasServers = htmlContent.includes('server') || 
-                      htmlContent.includes('player') || 
-                      htmlContent.includes('iframe') ||
-                      htmlContent.includes('video') ||
-                      htmlContent.includes('source');
-    
-    // Check if it's an error page
-    const isErrorPage = htmlContent.includes('not found') || 
-                       htmlContent.includes('404') ||
-                       htmlContent.includes('unavailable') ||
-                       htmlContent.includes('No video');
-    
-    const available = hasServers && !isErrorPage;
-    
-    res.json({ 
-      available,
-      streamUrl: available ? `${streamUrl}?autoplay=1` : null
-    });
-  } catch (error) {
-    res.json({ 
-      available: false,
-      streamUrl: null,
-      error: "Stream check failed"
-    });
   }
 });
 
