@@ -95,7 +95,7 @@ app.get("/api/movie/:id", async (req, res) => {
 });
 
 app.use((req, res) => {
-  res.status(404).send(<h1>404 Page not found</h1>);
+  res.status(404).send("<h1>404 Page Not Found</h1>");
 });
 
 app.listen(PORT, () => {
