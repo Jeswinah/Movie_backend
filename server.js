@@ -75,10 +75,34 @@ app.get("/api/stream/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const streamUrl = `https://player.videasy.net/movie/${id}?autoplay=1`;
-    res.json({ streamUrl });
+    res.json({ streamUrl, available: true });
   } catch (error) {
     console.error("Stream error:", error.message);
     res.status(500).json({ error: "Failed to get stream URL" });
+  }
+});
+
+app.get("/api/check-stream/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const streamUrl = `https://player.videasy.net/movie/${id}`;
+    
+    // Try to fetch the streaming page
+    const response = await axios.head(streamUrl, { 
+      timeout: 5000,
+      validateStatus: (status) => status < 500 
+    });
+    
+    res.json({ 
+      available: response.status === 200,
+      streamUrl: `${streamUrl}?autoplay=1`
+    });
+  } catch (error) {
+    res.json({ 
+      available: false,
+      streamUrl: null,
+      error: "Stream not available"
+    });
   }
 });
 
