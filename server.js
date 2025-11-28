@@ -74,7 +74,7 @@ app.get("/api/movie", async (req, res) => {
 app.get("/api/stream/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const streamUrl = `https://player.videasy.net/movie/${id}?autoplay=1`;
+    const streamUrl = `https://player.videasy.net/movie/${id}?color=8B5CF6&autoplay=1`;
     res.json({ streamUrl });
   } catch (error) {
     console.error("Stream error:", error.message);
