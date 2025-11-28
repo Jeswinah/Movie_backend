@@ -85,7 +85,6 @@ app.get("/api/stream/:id", async (req, res) => {
 app.get("/api/movie/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    // console.log("Fetching movie details for ID:", id);
     const response = await axios.get(`https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}`);
     res.json(response.data);
   } catch (error) {
@@ -94,11 +93,6 @@ app.get("/api/movie/:id", async (req, res) => {
   }
 });
 
-// 404 handler - must be last
-app.use((req, res, next) => {
-  console.log("404 page not found:", req.url);
-  res.status(404).json({ error: "404 Page Not Found", path: req.url });
-});
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
