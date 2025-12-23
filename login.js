@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const USERS = [
-  { id: 1, username: 'jeswin', password: 'admin123' },
+  { id: 1, username: 'admin', password: 'admin123' },
   { id: 2, username: 'demo', password: '123' },
 ];
 
