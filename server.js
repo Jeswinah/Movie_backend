@@ -65,7 +65,9 @@ const setCachedValue = (key, value) => {
     expiresAt: Date.now() + API_CACHE_TTL_MS
   });
 };
-
+app.get("/ping", (req, res) => {
+  res.status(200).send("OK");
+});
 app.get("/api/movies", async (req, res) => {
   try {
     const cacheKey = "movies:popular";
