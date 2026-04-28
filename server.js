@@ -14,10 +14,14 @@ const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const PORT = process.env.PORT || 5000;
 const API_CACHE_TTL_MS = 2 * 60 * 1000;
 const apiCache = new Map();
+const TMDB_IMAGE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const imageCache = new Map();
 
 const tmdbClient = axios.create({
   timeout: 8000
 });
+
+const allowedImageSizes = new Set(["w92", "w154", "w185", "w342", "w500", "w780", "w1280", "original"]);
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -65,8 +69,63 @@ const setCachedValue = (key, value) => {
     expiresAt: Date.now() + API_CACHE_TTL_MS
   });
 };
+
+const getCachedImage = (key) => {
+  const cached = imageCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt < Date.now()) {
+    imageCache.delete(key);
+    return null;
+  }
+  return cached.value;
+};
+
+const setCachedImage = (key, value) => {
+  imageCache.set(key, {
+    value,
+    expiresAt: Date.now() + TMDB_IMAGE_CACHE_TTL_MS
+  });
+};
 app.get("/ping", (req, res) => {
   res.status(200).send("OK");
+});
+app.get("/api/tmdb-image", async (req, res) => {
+  try {
+    const { path, size = "w342" } = req.query;
+
+    if (!path || typeof path !== "string") {
+      return res.status(400).json({ error: "Image path is required" });
+    }
+
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    if (normalizedPath.includes("://") || normalizedPath.includes("..")) {
+      return res.status(400).json({ error: "Invalid image path" });
+    }
+
+    const safeSize = allowedImageSizes.has(size) ? size : "w342";
+    const cacheKey = `${safeSize}:${normalizedPath}`;
+    const cached = getCachedImage(cacheKey);
+
+    if (cached) {
+      res.setHeader("Content-Type", cached.contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+      return res.send(cached.buffer);
+    }
+
+    const imageUrl = `https://image.tmdb.org/t/p/${safeSize}${normalizedPath}`;
+    const response = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 12000 });
+    const buffer = Buffer.from(response.data);
+    const contentType = response.headers["content-type"] || "image/jpeg";
+
+    setCachedImage(cacheKey, { buffer, contentType });
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+    res.send(buffer);
+  } catch (error) {
+    console.error("TMDB image proxy error:", error.message);
+    const status = error?.response?.status || 502;
+    res.status(status >= 400 && status < 600 ? status : 502).json({ error: "Failed to fetch image" });
+  }
 });
 app.get("/api/movies", async (req, res) => {
   try {
