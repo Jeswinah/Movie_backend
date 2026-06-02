@@ -23,6 +23,16 @@ const tmdbClient = axios.create({
 
 const allowedImageSizes = new Set(["w92", "w154", "w185", "w342", "w500", "w780", "w1280", "original"]);
 
+const genreMap = {
+  comedy: 35,
+  romance: 10749,
+  thriller: 53,
+  action: 28,
+  drama: 18,
+  horror: 27,
+  mystery: 9648
+};
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isRetryableTmdbError = (error) => {
@@ -136,7 +146,7 @@ app.get("/api/movies", async (req, res) => {
     }
 
     const page = [];
-    for(let i=1;i<=5;i++){
+    for(let i=1;i<=10;i++){
       page.push(fetchTmdbWithRetry(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&page=${i}`));
     }
     const settledResponses = await Promise.allSettled(page);
@@ -163,17 +173,23 @@ app.get("/api/movies", async (req, res) => {
 
 app.get("/api/movies/tamil", async (req, res) => {
   try {
-    const cacheKey = "movies:tamil";
+    const genre = req.query.genre || "all";
+    const cacheKey = genre === "all" ? "movies:tamil" : `movies:tamil:${genre}`;
     const cached = getCachedValue(cacheKey);
     if (cached) {
       return res.json(cached);
     }
 
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    const baseUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&with_release_type=4&primary_release_date.lte=${today}&sort_by=primary_release_date.desc&include_adult=false&region=IN`;
+    let baseUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&with_release_type=4&primary_release_date.lte=${today}&sort_by=primary_release_date.desc&include_adult=false&region=IN`;
+    
+    // Add genre filter if specified
+    if (genre !== "all" && genreMap[genre]) {
+      baseUrl += `&with_genres=${genreMap[genre]}`;
+    }
     
     const pagePromises = [];
-    for (let page = 1; page <= 5; page++) {
+    for (let page = 1; page <= 35; page++) {
       pagePromises.push(fetchTmdbWithRetry(`${baseUrl}&page=${page}`));
     }
 
@@ -197,6 +213,45 @@ app.get("/api/movies/tamil", async (req, res) => {
   } catch (error) {
     console.error("Tamil OTT error:", error.message);
     res.status(500).json({ error: "Failed to fetch Tamil OTT movies" });
+  }
+});
+
+app.get("/api/movies/tamil/trending", async (req, res) => {
+  try {
+    const cacheKey = "movies:tamil:trending";
+    const cached = getCachedValue(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const trendingNewTamilUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&primary_release_date.lte=${today}&sort_by=popularity.desc&include_adult=false&region=IN`;
+    
+    const pagePromises = [];
+    for (let page = 1; page <= 5; page++) {
+      pagePromises.push(fetchTmdbWithRetry(`${trendingNewTamilUrl}&page=${page}`));
+    }
+
+    const settledResponses = await Promise.allSettled(pagePromises);
+    const successResponses = settledResponses
+      .filter((item) => item.status === "fulfilled")
+      .map((item) => item.value);
+
+    if (!successResponses.length) {
+      return res.status(502).json({ error: "TMDB is temporarily unavailable" });
+    }
+    
+    // Combine all results from all pages
+    const allResults = successResponses.reduce((acc, response) => {
+      return acc.concat(response.data.results || []);
+    }, []);
+
+    const payload = { results: allResults, total_results: allResults.length };
+    setCachedValue(cacheKey, payload);
+    res.json(payload);
+  } catch (error) {
+    console.error("Tamil trending error:", error.message);
+    res.status(500).json({ error: "Failed to fetch Tamil trending movies" });
   }
 });
 
@@ -314,6 +369,52 @@ app.get("/api/series/:id", async (req, res) => {
     console.error("Series details error:", error.message);
     const status = isRetryableTmdbError(error) ? 502 : 500;
     res.status(status).json({ error: "Failed to fetch series details" });
+  }
+});
+
+app.get("/api/movie/:id/credits", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cacheKey = `credits:movie:${id}`;
+    const cached = getCachedValue(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const response = await fetchTmdbWithRetry(`https://api.themoviedb.org/3/movie/${id}/credits?api_key=${TMDB_API_KEY}`);
+    const cast = response.data.cast || [];
+    const topCast = cast.slice(0, 12); // Get top 12 cast members
+    
+    const payload = { cast: topCast };
+    setCachedValue(cacheKey, payload);
+    res.json(payload);
+  } catch (error) {
+    console.error("Movie credits error:", error.message);
+    const status = isRetryableTmdbError(error) ? 502 : 500;
+    res.status(status).json({ error: "Failed to fetch movie credits", cast: [] });
+  }
+});
+
+app.get("/api/series/:id/credits", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cacheKey = `credits:series:${id}`;
+    const cached = getCachedValue(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const response = await fetchTmdbWithRetry(`https://api.themoviedb.org/3/tv/${id}/aggregate_credits?api_key=${TMDB_API_KEY}`);
+    const cast = response.data.cast || [];
+    const topCast = cast.slice(0, 12); // Get top 12 cast members
+    
+    const payload = { cast: topCast };
+    setCachedValue(cacheKey, payload);
+    res.json(payload);
+  } catch (error) {
+    console.error("Series credits error:", error.message);
+    const status = isRetryableTmdbError(error) ? 502 : 500;
+    res.status(status).json({ error: "Failed to fetch series credits", cast: [] });
   }
 });
 
