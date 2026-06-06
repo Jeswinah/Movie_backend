@@ -187,7 +187,6 @@ app.get("/api/movies/tamil", async (req, res) => {
     if (genre !== "all" && genreMap[genre]) {
       baseUrl += `&with_genres=${genreMap[genre]}`;
     }
-    
     const pagePromises = [];
     for (let page = 1; page <= 35; page++) {
       pagePromises.push(fetchTmdbWithRetry(`${baseUrl}&page=${page}`));
@@ -327,7 +326,7 @@ app.get("/api/series", async (req, res) => {
 app.get("/api/stream/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const streamUrl = `https://player.videasy.net/movie/${id}?color=8B5CF6&autoplay=1`;
+    const streamUrl = `https://player.videasy.net/movie/${id}`;
     res.json({ streamUrl });
   } catch (error) {
     console.error("Stream error:", error.message);
