@@ -17,10 +17,6 @@ const apiCache = new Map();
 const TMDB_IMAGE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const imageCache = new Map();
 
-const tmdbClient = axios.create({
-  timeout: 8000
-});
-
 const allowedImageSizes = new Set(["w92", "w154", "w185", "w342", "w500", "w780", "w1280", "original"]);
 
 const genreMap = {
@@ -33,34 +29,31 @@ const genreMap = {
   mystery: 9648
 };
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const isRetryableTmdbError = (error) => {
-  const code = error?.code;
-  const status = error?.response?.status;
-  return (
-    code === "ECONNRESET" ||
-    code === "ETIMEDOUT" ||
-    code === "ECONNABORTED" ||
-    status === 429 ||
-    (status >= 500 && status < 600)
-  );
+const fetchTmdb = async (url, attempts = 2) => {
+  try {
+    return await axios.get(url, { timeout: 15000 });
+  } catch (error) {
+    const retryable = ["ECONNRESET", "ETIMEDOUT", "ECONNABORTED"].includes(error.code);
+    if (!retryable || attempts === 0) throw error;
+    await wait(500);
+    return fetchTmdb(url, attempts - 1);
+  }
 };
 
-const fetchTmdbWithRetry = async (url, retries = 2) => {
-  let lastError;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await tmdbClient.get(url);
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableTmdbError(error) || attempt === retries) {
-        throw error;
-      }
-      await wait(300 * (attempt + 1));
-    }
+const fetchPages = async (url, count) => {
+  const responses = [];
+
+  for (let page = 1; page <= count; page += 5) {
+    const requests = Array.from(
+      { length: Math.min(5, count - page + 1) },
+      (_, index) => fetchTmdb(`${url}&page=${page + index}`)
+    );
+    responses.push(...await Promise.all(requests));
   }
-  throw lastError;
+
+  return responses;
 };
 
 const getCachedValue = (key) => {
@@ -145,22 +138,11 @@ app.get("/api/movies", async (req, res) => {
       return res.json(cached);
     }
 
-    const page = [];
-    for(let i=1;i<=10;i++){
-      page.push(fetchTmdbWithRetry(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&page=${i}`));
-    }
-    const settledResponses = await Promise.allSettled(page);
-    const successResponses = settledResponses
-      .filter((item) => item.status === "fulfilled")
-      .map((item) => item.value);
-
-    if (!successResponses.length) {
-      return res.status(502).json({ error: "TMDB is temporarily unavailable" });
-    }
-
-    const allResults = successResponses.reduce((acc, response) => {
-      return acc.concat(response.data.results || []);
-    }, []);
+    const responses = await fetchPages(
+      `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}`,
+      10
+    );
+    const allResults = responses.flatMap((response) => response.data.results || []);
 
     const payload = { results: allResults, total_results: allResults.length };
     setCachedValue(cacheKey, payload);
@@ -187,24 +169,8 @@ app.get("/api/movies/tamil", async (req, res) => {
     if (genre !== "all" && genreMap[genre]) {
       baseUrl += `&with_genres=${genreMap[genre]}`;
     }
-    const pagePromises = [];
-    for (let page = 1; page <= 35; page++) {
-      pagePromises.push(fetchTmdbWithRetry(`${baseUrl}&page=${page}`));
-    }
-
-    const settledResponses = await Promise.allSettled(pagePromises);
-    const successResponses = settledResponses
-      .filter((item) => item.status === "fulfilled")
-      .map((item) => item.value);
-
-    if (!successResponses.length) {
-      return res.status(502).json({ error: "TMDB is temporarily unavailable" });
-    }
-    
-    // Combine all results from all pages
-    const allResults = successResponses.reduce((acc, response) => {
-      return acc.concat(response.data.results || []);
-    }, []);
+    const responses = await fetchPages(baseUrl, 35);
+    const allResults = responses.flatMap((response) => response.data.results || []);
 
     const payload = { results: allResults, total_results: allResults.length };
     setCachedValue(cacheKey, payload);
@@ -226,24 +192,8 @@ app.get("/api/movies/tamil/trending", async (req, res) => {
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
     const trendingNewTamilUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=ta&primary_release_date.lte=${today}&sort_by=popularity.desc&include_adult=false&region=IN`;
     
-    const pagePromises = [];
-    for (let page = 1; page <= 5; page++) {
-      pagePromises.push(fetchTmdbWithRetry(`${trendingNewTamilUrl}&page=${page}`));
-    }
-
-    const settledResponses = await Promise.allSettled(pagePromises);
-    const successResponses = settledResponses
-      .filter((item) => item.status === "fulfilled")
-      .map((item) => item.value);
-
-    if (!successResponses.length) {
-      return res.status(502).json({ error: "TMDB is temporarily unavailable" });
-    }
-    
-    // Combine all results from all pages
-    const allResults = successResponses.reduce((acc, response) => {
-      return acc.concat(response.data.results || []);
-    }, []);
+    const responses = await fetchPages(trendingNewTamilUrl, 5);
+    const allResults = responses.flatMap((response) => response.data.results || []);
 
     const payload = { results: allResults, total_results: allResults.length };
     setCachedValue(cacheKey, payload);
@@ -268,7 +218,7 @@ app.get("/api/movie", async (req, res) => {
       return res.json(cached);
     }
 
-    const response = await fetchTmdbWithRetry(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`);
+    const response = await fetchTmdb(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`);
     const data = response.data || {};
     const filteredResults = (data.results || []).filter((item) => item.media_type === "movie" || item.media_type === "tv");
 
@@ -277,8 +227,7 @@ app.get("/api/movie", async (req, res) => {
     res.json(payload);
   } catch (error) {
     console.error("Search error:", error.message);
-    const status = isRetryableTmdbError(error) ? 502 : 500;
-    res.status(status).json({ error: "Failed to search movies" });
+    res.status(500).json({ error: "Failed to search movies" });
   }
 });
 
@@ -290,29 +239,11 @@ app.get("/api/series", async (req, res) => {
       return res.json(cached);
     }
 
-    const pagePromises = [];
-
-    for (let i = 1; i <= 5; i++) {
-      pagePromises.push(
-        fetchTmdbWithRetry(
-          `https://api.themoviedb.org/3/tv/popular?api_key=${TMDB_API_KEY}&page=${i}`
-        )
-      );
-    }
-
-    const settledResponses = await Promise.allSettled(pagePromises);
-
-    const successResponses = settledResponses
-      .filter((item) => item.status === "fulfilled")
-      .map((item) => item.value);
-
-    if (!successResponses.length) {
-      return res.status(502).json({ error: "TMDB unavailable" });
-    }
-
-    const allResults = successResponses.reduce((acc, response) => {
-      return acc.concat(response.data.results || []);
-    }, []);
+    const responses = await fetchPages(
+      `https://api.themoviedb.org/3/tv/popular?api_key=${TMDB_API_KEY}`,
+      5
+    );
+    const allResults = responses.flatMap((response) => response.data.results || []);
 
     const payload = { results: allResults, total_results: allResults.length };
     setCachedValue(cacheKey, payload);
@@ -324,53 +255,44 @@ app.get("/api/series", async (req, res) => {
 });
 
 app.get("/api/stream/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const streamUrl = `https://player.videasy.net/movie/${id}`;
-    res.json({ streamUrl });
-  } catch (error) {
-    console.error("Stream error:", error.message);
-    res.status(500).json({ error: "Failed to get stream URL" });
-  }
+  const streamUrl = `https://cinesrc.st/embed/movie/${req.params.id}`;
+  const fallbackUrl = `https://vidsrc.sbs/embed/movie/${req.params.id}`;
+  const fallbackUrl2 = `https://player.videasy.net/movie/${req.params.id}`;
+  res.json({ streamUrl, fallbackUrl, fallbackUrl2 });
 });
 
 app.get("/api/series/stream/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const season = req.query.season || 1;
-    const episode = req.query.episode || 1;
-    const streamUrl = `https://player.videasy.net/tv/${id}/${season}/${episode}?nextEpisode=true&autoplayNextEpisode=true&episodeSelector=true&overlay=true&color=8B5CF6`;
-    res.json({ streamUrl });
-  } catch (error) {
-    console.error("Series stream error:", error.message);
-    res.status(500).json({ error: "Failed to get series stream URL" });
-  }
+  const season = req.query.season || 1;
+  const episode = req.query.episode || 1;
+  const streamUrl = `https://cinesrc.st/embed/tv/${req.params.id}?s=${season}&e=${episode}`;
+  const fallbackUrl = `https://vidsrc.sbs/embed/tv/${req.params.id}/${season}/${episode}`;
+  const fallbackUrl2 = `https://player.videasy.net/tv/${req.params.id}/${season}/${episode}?nextEpisode=true&autoplayNextEpisode=true&episodeSelector=true&overlay=true&color=8B5CF6`;
+  res.json({ streamUrl, fallbackUrl, fallbackUrl2 });
 });
 
 app.get("/api/movie/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const response = await fetchTmdbWithRetry(`https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}`);
+    const response = await fetchTmdb(`https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}`);
     res.json(response.data);
   } catch (error) {
     console.error("Movie details error:", error.message);
-    const status = isRetryableTmdbError(error) ? 502 : 500;
-    res.status(status).json({ error: "Failed to fetch movie details" });
+    res.status(500).json({ error: "Failed to fetch movie details" });
   }
 });
 
 app.get("/api/series/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const response = await fetchTmdbWithRetry(`https://api.themoviedb.org/3/tv/${id}?api_key=${TMDB_API_KEY}`);
+    const response = await fetchTmdb(`https://api.themoviedb.org/3/tv/${id}?api_key=${TMDB_API_KEY}`);
     res.json(response.data);
   } catch (error) {
     console.error("Series details error:", error.message);
-    const status = isRetryableTmdbError(error) ? 502 : 500;
-    res.status(status).json({ error: "Failed to fetch series details" });
+    res.status(500).json({ error: "Failed to fetch series details" });
   }
 });
 
+// Cast endpoints for movies and series
 app.get("/api/movie/:id/credits", async (req, res) => {
   try {
     const { id } = req.params;
@@ -380,7 +302,7 @@ app.get("/api/movie/:id/credits", async (req, res) => {
       return res.json(cached);
     }
 
-    const response = await fetchTmdbWithRetry(`https://api.themoviedb.org/3/movie/${id}/credits?api_key=${TMDB_API_KEY}`);
+    const response = await fetchTmdb(`https://api.themoviedb.org/3/movie/${id}/credits?api_key=${TMDB_API_KEY}`);
     const cast = response.data.cast || [];
     const topCast = cast.slice(0, 12); // Get top 12 cast members
     
@@ -389,8 +311,7 @@ app.get("/api/movie/:id/credits", async (req, res) => {
     res.json(payload);
   } catch (error) {
     console.error("Movie credits error:", error.message);
-    const status = isRetryableTmdbError(error) ? 502 : 500;
-    res.status(status).json({ error: "Failed to fetch movie credits", cast: [] });
+    res.status(500).json({ error: "Failed to fetch movie credits", cast: [] });
   }
 });
 
@@ -403,7 +324,7 @@ app.get("/api/series/:id/credits", async (req, res) => {
       return res.json(cached);
     }
 
-    const response = await fetchTmdbWithRetry(`https://api.themoviedb.org/3/tv/${id}/aggregate_credits?api_key=${TMDB_API_KEY}`);
+    const response = await fetchTmdb(`https://api.themoviedb.org/3/tv/${id}/aggregate_credits?api_key=${TMDB_API_KEY}`);
     const cast = response.data.cast || [];
     const topCast = cast.slice(0, 12); // Get top 12 cast members
     
@@ -412,8 +333,7 @@ app.get("/api/series/:id/credits", async (req, res) => {
     res.json(payload);
   } catch (error) {
     console.error("Series credits error:", error.message);
-    const status = isRetryableTmdbError(error) ? 502 : 500;
-    res.status(status).json({ error: "Failed to fetch series credits", cast: [] });
+    res.status(500).json({ error: "Failed to fetch series credits", cast: [] });
   }
 });
 
@@ -421,7 +341,7 @@ const startServer = async () => {
   try {
     await connectDb();
     app.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
+      console.log(`Server running on http://localhost:${PORT}`);
     });
   } catch (error) {
     console.error("Failed to start server due to database connection error:", error.message);

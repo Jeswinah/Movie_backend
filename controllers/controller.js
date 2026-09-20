@@ -1,8 +1,8 @@
-const bcrypt =require( "bcryptjs");
-const User =require ("../models/user.js");
-const { generateToken } =require( "../utils/jwt.js");
+const bcrypt = require("bcryptjs");
+const User = require("../models/user.js");
+const { generateToken } = require("../utils/jwt.js");
 
- const signup = async (req, res) => {
+const signup = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
@@ -40,7 +40,7 @@ const { generateToken } =require( "../utils/jwt.js");
   }
 };
 
- const login = async (req, res) => {
+const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
